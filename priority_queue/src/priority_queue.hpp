@@ -39,6 +39,13 @@ namespace sjtu {
         return temp;
       }
 
+      /**
+       *@brief merge the siblings of a node
+       *@return a node* of the root node for the merged nodes
+       *@throw throw sjtu::runtime_error if there is an exception when merging.
+       *If an error occured when merging the merged siblings and the paired nodes, siblings already merged will not be restored
+       *
+       */
       node *merge_sibling() {
         //from oi.wiki
         if (sibling == nullptr) {
@@ -48,16 +55,31 @@ namespace sjtu {
         node *c = y->sibling;
         sibling = nullptr;
         y->sibling = nullptr;
-        if (c == nullptr) {
-          return merge(this, y);
+
+        node* pair;
+        try {
+          pair = merge(this, y);
+          if (c == nullptr) {
+            return pair;
+          }
+          c = c->merge_sibling();
+          return merge(c, pair);
+        } catch (...) {
+          sibling = y;
+          y->sibling = c;
+          throw sjtu::runtime_error();
         }
-        return merge(c->merge_sibling(), merge(this, y));
       }
 
+      /**
+       * @brief merge two nodes
+       * @return node* of the new node
+       */
       static node *merge(node *x, node *y) {
         //from oi.wiki
         if (x == nullptr) return y;
         if (y == nullptr) return x;
+
         if (Compare{}(x->data, y->data)) {
           std::swap(x, y);
         };
@@ -72,9 +94,8 @@ namespace sjtu {
 
     /**
      *
-     * @param single_node
      */
-    priority_queue(node &single_node) {
+    explicit priority_queue(node &single_node) {
       root = &single_node;
       _size = 1;
     }
@@ -150,6 +171,7 @@ namespace sjtu {
         root = node::merge(root, temp);
       } catch (...) {
         delete temp;
+        throw sjtu::runtime_error();
       }
       ++_size;
     }
@@ -202,6 +224,7 @@ namespace sjtu {
         other.root = nullptr;
         other._size = 0;
       } catch (...) {
+        throw sjtu::runtime_error();
       }
     }
   };

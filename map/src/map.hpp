@@ -30,7 +30,9 @@ namespace sjtu {
       DataNode* data;
       Node *ls=nullptr,*rs=nullptr,*parent=nullptr;
 
-      Node(const value_type& value) {
+      int height=0;
+
+      explicit Node(const value_type& value) {
         data = new DataNode(value);
         data->node = this;
       }
@@ -43,6 +45,7 @@ namespace sjtu {
 
       Node* copy() {
         Node* temp = new Node(data->data);
+        temp->height = height;
         if(ls) {
           temp->ls = ls->copy();
           temp->ls->parent = temp;
@@ -52,11 +55,6 @@ namespace sjtu {
           temp->rs->parent=temp;
         }
         return temp;
-      }
-
-      Node* maintain() {
-        //TODO
-        return this;
       }
 
       Node* next() {
@@ -95,6 +93,9 @@ namespace sjtu {
         other->data->node=other;
         return other;
       }
+      void update_height() {
+        height = std::max(ls?ls->height:0,rs?rs->height:0)+1;
+      }
 
 
     };
@@ -103,7 +104,7 @@ namespace sjtu {
       value_type data;
       Node* node;
 
-      DataNode(const value_type& value):data(value) {
+      explicit DataNode(const value_type& value):data(value) {
         node = nullptr;
       }
     };
@@ -140,7 +141,7 @@ namespace sjtu {
             father->rs = temp;
           }
         }
-        map._size++;
+        ++map._size;
         map.is_dirty = true;
         return temp;
       }
@@ -200,12 +201,72 @@ namespace sjtu {
       return last_cache;
     }
 
+    void rotate_left(Node* node) {
+      if((!node)||(!node->rs)){return;}
+      Node* temp = node->rs;
+      temp->parent = node->parent;
+      if(root!=node) {
+        ((node->parent->ls==node)?node->parent->ls:node->parent->rs)=temp;
+      }else {
+        root = temp;
+      }
+      node->rs = temp->ls;
+      if(node->rs) node->rs->parent = node;
+      temp->ls = node;
+      node->parent = temp;
+      node->update_height();
+      temp->update_height();
+    }
+
+    void rotate_right(Node* node) {
+      if((!node)||(!node->ls)){return;}
+      Node* temp = node->ls;
+      temp->parent = node->parent;
+      if(root!=node) {
+        ((node->parent->ls==node)?node->parent->ls:node->parent->rs)=temp;
+      }else {
+        root = temp;
+      }
+      node->ls = temp->rs;
+      if(node->ls) node->ls->parent = node;
+      temp->rs = node;
+      node->parent = temp;
+      node->update_height();
+      temp->update_height();
+    }
+
+    inline static int h(Node* node){
+      return node?node->height:0;
+    }
+
+    //from oi.wiki
+    void maintain(Node* node) {
+      //TODO
+      Node* parent = node->parent;
+      node->update_height();
+      Node* ls = node->ls;
+      Node* rs = node->rs;
+      if(h(ls)-h(rs)==2) {
+        if(h(ls->ls)>=h(ls->rs)) {
+          rotate_right(node);
+        } else {
+          rotate_left(ls);
+          rotate_right(node);
+        }
+      } else if(h(ls)-h(rs)==-2) {
+        if(h(rs->ls)<=h(rs->rs)) {
+          rotate_left(node);
+        } else {
+          rotate_right(rs);
+          rotate_left(node);
+        }
+      }
+      if(parent) {
+        maintain(parent);
+      }
+    }
+
   public:
-    /**
-     * the internal type of data.
-     * it should have a default constructor, a copy constructor.
-     * You can use sjtu::map as value_type by typedef.
-     */
 
     /**
      * see BidirectionalIterator at CppReference for help.
@@ -292,22 +353,22 @@ namespace sjtu {
       }
 
       bool operator==(const iterator &rhs) const {
-        return ptr == rhs.ptr;
+        return ptr == rhs.ptr&&map_ptr==rhs.map_ptr;
       }
 
       bool operator==(const const_iterator &rhs) const {
-        return ptr == rhs.ptr;
+        return ptr == rhs.ptr&&map_ptr==rhs.map_ptr;
       }
 
       /**
        * some other operator for iterator.
        */
       bool operator!=(const iterator &rhs) const {
-        return ptr != rhs.ptr;
+        return !(*this==rhs);
       }
 
       bool operator!=(const const_iterator &rhs) const {
-        return ptr != rhs.ptr;
+        return !(*this==rhs);
       }
 
       /**
@@ -321,7 +382,7 @@ namespace sjtu {
     };
 
     class const_iterator {
-      // it should has similar member method as iterator.
+      // it should have similar member method as iterator.
       //  and it should be able to construct from an iterator.
     private:
       // data members.
@@ -406,22 +467,22 @@ namespace sjtu {
       }
 
       bool operator==(const iterator &rhs) const {
-        return ptr == rhs.ptr;
+        return ptr == rhs.ptr&&map_ptr==rhs.map_ptr;
       }
 
       bool operator==(const const_iterator &rhs) const {
-        return ptr == rhs.ptr;
+        return ptr == rhs.ptr&&map_ptr==rhs.map_ptr;
       }
 
       /**
        * some other operator for iterator.
        */
       bool operator!=(const iterator &rhs) const {
-        return ptr != rhs.ptr;
+        return !(*this==rhs);
       }
 
       bool operator!=(const const_iterator &rhs) const {
-        return ptr != rhs.ptr;
+        return !(*this==rhs);
       }
 
       /**
@@ -479,7 +540,7 @@ namespace sjtu {
      * If no such element exists, an exception of type `index_out_of_bound'
      */
     T &at(const Key &key) {
-      auto [temp,_,__] = find_unique(key);
+      auto [temp,_unused1,_unused2] = find_unique(key);
       if(!temp) {
         throw index_out_of_bound();
       }
@@ -487,7 +548,7 @@ namespace sjtu {
     }
 
     const T &at(const Key &key) const {
-      auto [temp,_,__] = find_unique(key);
+      auto [temp,_unused1,_unused2] = find_unique(key);
       if(!temp) {
         throw index_out_of_bound();
       }
@@ -506,9 +567,10 @@ namespace sjtu {
       Node* temp = find_result.curr;
       if(!temp) {
         temp = find_result.new_node({key,T()},*this);
+        maintain(temp);
         is_dirty = true;
       }
-      return temp->maintain()->data->data.second;
+      return temp->data->data.second;
     }
 
     /**
@@ -580,7 +642,9 @@ namespace sjtu {
         return {iterator(find_result.curr->data,this),false};
       }
       is_dirty = true;
-      return {iterator(find_result.new_node(value,*this)->maintain()->data,this),true};
+      Node* temp = find_result.new_node(value,*this);
+      maintain(temp);
+      return {iterator(temp->data,this),true};
     }
 
     /**
@@ -609,7 +673,7 @@ namespace sjtu {
       auto temp_parent = temp->parent;
       (temp_parent->ls==temp?temp_parent->ls:temp_parent->rs) = nullptr;
       delete temp;
-      temp_parent->maintain();
+      maintain(temp_parent);
     }
 
     /**

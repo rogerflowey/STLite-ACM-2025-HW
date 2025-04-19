@@ -25,26 +25,22 @@ namespace sjtu {
   public:
     typedef pair<const Key, T> value_type;
   private:
-    struct DataNode;
     struct Node {
-      DataNode* data;
+      value_type value;
       Node *ls=nullptr,*rs=nullptr,*parent=nullptr;
 
-      int height=0;
+      int height=1;
 
-      explicit Node(const value_type& value) {
-        data = new DataNode(value);
-        data->node = this;
+      explicit Node(const value_type& value):value(value) {
       }
 
       ~Node() {
-        delete data;
         delete ls;
         delete rs;
       }
 
       Node* copy() {
-        Node* temp = new Node(data->data);
+        Node* temp = new Node(value);
         temp->height = height;
         if(ls) {
           temp->ls = ls->copy();
@@ -87,26 +83,11 @@ namespace sjtu {
         return temp->parent;
       }
 
-      Node* swap(Node* other) {
-        std::swap(data,other->data);
-        data->node = this;
-        other->data->node=other;
-        return other;
-      }
       void update_height() {
         height = std::max(ls?ls->height:0,rs?rs->height:0)+1;
       }
 
 
-    };
-
-    struct DataNode {
-      value_type data;
-      Node* node;
-
-      explicit DataNode(const value_type& value):data(value) {
-        node = nullptr;
-      }
     };
 
     Node* root;
@@ -158,8 +139,8 @@ namespace sjtu {
       bool comp = false;
       while(temp) {
         father = temp;
-        comp = cmp(key,temp->data->data.first);
-        if(!comp&&!cmp(temp->data->data.first,key)) {
+        comp = cmp(key,temp->value.first);
+        if(!comp&&!cmp(temp->value.first,key)) {
           return {temp,nullptr,false};
         }
         temp = (comp?temp->ls:temp->rs);
@@ -266,6 +247,64 @@ namespace sjtu {
       }
     }
 
+
+
+    void swap(Node* u,Node* v) {//TODO
+      if (!u || !v || u == v) {
+        return; // Nothing to swap or invalid input
+      }
+      Node* u_parent = u->parent;
+      Node* v_parent = v->parent;
+      bool u_was_root = (u_parent == nullptr);
+      bool v_was_root = (v_parent == nullptr);
+      bool u_was_left_child = !u_was_root && (u_parent->ls == u);
+      bool v_was_left_child = !v_was_root && (v_parent->ls == v);
+      std::swap(u->ls,v->ls);
+      std::swap(u->rs,v->rs);
+      std::swap(u->parent,v->parent);
+      if(u->ls==u) {
+        u->ls = v;
+        v->parent = u;
+      }
+      else if(u->rs==u) {
+        u->rs = v;
+        v->parent = u;
+      }
+      else if(v->ls==v) {
+        v->ls = u;
+        u->parent = v;
+      }
+      else if(v->rs==v) {
+        v->rs = u;
+        u->parent = v;
+      }
+      if(u->ls) u->ls->parent = u;
+      if(u->rs) u->rs->parent = u;
+      if(v->ls) v->ls->parent = v;
+      if(v->rs) v->rs->parent = v;
+      if (u_parent && u_parent != v) {
+        if (u_was_left_child) {
+          u_parent->ls = v;
+        } else {
+          u_parent->rs = v;
+        }
+      }
+      if (v_parent && v_parent != u) {
+        if (v_was_left_child) {
+          v_parent->ls = u;
+        } else {
+          v_parent->rs = u;
+        }
+      }
+      if (u_was_root) {
+        root = v;
+        v->parent = nullptr;
+      } else if (v_was_root) {
+        root = u;
+        u->parent = nullptr;
+      }
+    }
+
   public:
 
     /**
@@ -279,7 +318,7 @@ namespace sjtu {
 
     class iterator {
     private:
-      DataNode* ptr;
+      Node* ptr;
       map* map_ptr;
       friend const_iterator;
       friend map;
@@ -292,7 +331,7 @@ namespace sjtu {
         ptr = other.ptr;
       }
 
-      explicit iterator(DataNode* ptr,map* map_ptr):ptr(ptr),map_ptr(map_ptr){};
+      explicit iterator(Node* ptr,map* map_ptr):ptr(ptr),map_ptr(map_ptr){};
 
 
       iterator operator++(int) {
@@ -300,11 +339,11 @@ namespace sjtu {
           throw invalid_iterator();
         }
         iterator temp = *this;
-        auto temp_ptr = ptr->node->next();
+        auto temp_ptr = ptr->next();
         if(!temp_ptr) {
           ptr = nullptr;
         }else {
-          ptr = temp_ptr->data;
+          ptr = temp_ptr;
         }
         return temp;
       }
@@ -314,31 +353,31 @@ namespace sjtu {
         if(ptr == nullptr) {
           throw invalid_iterator();
         }
-        auto temp_ptr = ptr->node->next();
+        auto temp_ptr = ptr->next();
         if(!temp_ptr) {
           ptr = nullptr;
         }else {
-          ptr = temp_ptr->data;
+          ptr = temp_ptr;
         }
         return *this;
       }
 
       iterator operator--(int) {
         iterator temp = *this;
-        auto temp_ptr = ptr?ptr->node->prev():map_ptr->last();
+        auto temp_ptr = ptr?ptr->prev():map_ptr->last();
         if(!temp_ptr) {
           throw invalid_iterator();
         }
-        ptr = temp_ptr->data;
+        ptr = temp_ptr;
         return temp;
       }
 
       iterator &operator--() {
-        auto temp_ptr = ptr?ptr->node->prev():map_ptr->last();
+        auto temp_ptr = ptr?ptr->prev():map_ptr->last();
         if(!temp_ptr) {
           throw invalid_iterator();
         }
-        ptr = temp_ptr->data;
+        ptr = temp_ptr;
         return *this;
       }
 
@@ -349,7 +388,7 @@ namespace sjtu {
         if(ptr==nullptr) {
           throw invalid_iterator();
         }
-        return ptr->data;
+        return ptr->value;
       }
 
       bool operator==(const iterator &rhs) const {
@@ -377,7 +416,7 @@ namespace sjtu {
        */
       value_type *operator->() const
         noexcept {
-        return &(ptr->data);
+        return &(ptr->value);
       }
     };
 
@@ -386,7 +425,7 @@ namespace sjtu {
       //  and it should be able to construct from an iterator.
     private:
       // data members.
-      const DataNode* ptr;
+      Node* ptr;
       const map* map_ptr;
       friend iterator;
       friend map;
@@ -406,7 +445,7 @@ namespace sjtu {
         map_ptr = other.map_ptr;
       }
 
-      explicit const_iterator(const DataNode* ptr,const map* map_ptr):ptr(ptr),map_ptr(map_ptr) {};
+      explicit const_iterator(const Node* ptr,const map* map_ptr):ptr(const_cast<Node*>(ptr)),map_ptr(map_ptr) {};
 
 
       const_iterator operator++(int) {
@@ -414,11 +453,11 @@ namespace sjtu {
           throw invalid_iterator();
         }
         const_iterator temp = *this;
-        auto temp_ptr = ptr->node->next();
+        Node* temp_ptr = ptr->next();
         if(!temp_ptr) {
           ptr = nullptr;
         }else {
-          ptr = temp_ptr->data;
+          ptr = temp_ptr;
         }
         return temp;
       }
@@ -428,31 +467,31 @@ namespace sjtu {
         if(ptr == nullptr) {
           throw invalid_iterator();
         }
-        auto temp_ptr = ptr->node->next();
+        auto temp_ptr = ptr->next();
         if(!temp_ptr) {
           ptr = nullptr;
         }else {
-          ptr = temp_ptr->data;
+          ptr = temp_ptr;
         }
         return *this;
       }
 
       const_iterator operator--(int) {
         const_iterator temp = *this;
-        auto temp_ptr = ptr?ptr->node->prev():map_ptr->last();
+        auto temp_ptr = ptr?ptr->prev():map_ptr->last();
         if(!temp_ptr) {
           throw invalid_iterator();
         }
-        ptr = temp_ptr->data;
+        ptr = temp_ptr;
         return temp;
       }
 
       const_iterator &operator--() {
-        auto temp_ptr = ptr?ptr->node->prev():map_ptr->last();
+        auto temp_ptr = ptr?ptr->prev():map_ptr->last();
         if(!temp_ptr) {
           throw invalid_iterator();
         }
-        ptr = temp_ptr->data;
+        ptr = temp_ptr;
         return *this;
       }
 
@@ -463,7 +502,7 @@ namespace sjtu {
         if(ptr==nullptr) {
           throw invalid_iterator();
         }
-        return ptr->data;
+        return ptr->value;
       }
 
       bool operator==(const iterator &rhs) const {
@@ -491,7 +530,7 @@ namespace sjtu {
        */
       const value_type *operator->() const
         noexcept {
-        return &(ptr->data);
+        return &(ptr->value);
       }
     };
 
@@ -544,7 +583,7 @@ namespace sjtu {
       if(!temp) {
         throw index_out_of_bound();
       }
-      return temp->data->data.second;
+      return temp->value.second;
     }
 
     const T &at(const Key &key) const {
@@ -552,7 +591,8 @@ namespace sjtu {
       if(!temp) {
         throw index_out_of_bound();
       }
-      return temp->data->data.second;
+      return temp->value.second;
+
     }
 
     /**
@@ -570,7 +610,7 @@ namespace sjtu {
         maintain(temp);
         is_dirty = true;
       }
-      return temp->data->data.second;
+      return temp->value.second;
     }
 
     /**
@@ -585,11 +625,11 @@ namespace sjtu {
      * return a iterator to the beginning
      */
     iterator begin() {
-      return iterator((front()?front()->data:nullptr),this);
+      return iterator(front(),this);
     }
 
     const_iterator cbegin() const {
-      return const_iterator(front()?front()->data:nullptr,this);
+      return const_iterator(front(),this);
     }
 
     /**
@@ -639,12 +679,12 @@ namespace sjtu {
     pair<iterator, bool> insert(const value_type &value) {
       auto find_result = find_unique(value.first);
       if(find_result.curr) {
-        return {iterator(find_result.curr->data,this),false};
+        return {iterator(find_result.curr,this),false};
       }
       is_dirty = true;
       Node* temp = find_result.new_node(value,*this);
       maintain(temp);
-      return {iterator(temp->data,this),true};
+      return {iterator(temp,this),true};
     }
 
     /**
@@ -658,12 +698,12 @@ namespace sjtu {
       }
       --_size;
       is_dirty = true;
-      Node* temp = pos.ptr->node;
+      Node* temp = pos.ptr;
       if (temp->ls&&temp->rs) {
-        temp = temp->swap(temp->next());
+        swap(temp,temp->next());
       }
       if(temp->ls||temp->rs) {
-        temp = temp->ls?temp->swap(temp->ls):temp->swap(temp->rs);
+        temp->ls?swap(temp,temp->ls):swap(temp,temp->rs);
       }
       if(temp==root) {
         root = nullptr;
@@ -695,12 +735,12 @@ namespace sjtu {
      */
     iterator find(const Key &key) {
       auto result = find_unique(key);
-      return iterator((result.curr?result.curr->data:nullptr),this);
+      return iterator((result.curr),this);
     }
 
     const_iterator find(const Key &key) const {
       auto result = find_unique(key);
-      return const_iterator((result.curr?result.curr->data:nullptr),this);
+      return const_iterator((result.curr),this);
     }
   };
 }
